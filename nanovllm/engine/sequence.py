@@ -20,7 +20,9 @@ class Sequence:
         self.status = SequenceStatus.WAITING
         self.token_ids = copy(token_ids)
         self.last_token = token_ids[-1]
+        # self.num_tokens 动态在变
         self.num_tokens = len(self.token_ids)
+        # self.num_prompt_tokens 不会变
         self.num_prompt_tokens = len(token_ids)
         self.num_cached_tokens = 0
         self.block_table = []

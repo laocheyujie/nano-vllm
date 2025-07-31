@@ -146,13 +146,20 @@ class Qwen3DecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         residual: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        # 1. Attention 前的 LayerNorm
         if residual is None:
+            # 第一次调用时，residual 为 None
             residual = hidden_states
+            # 直接用 hidden_states 计算 norm，使用的是 rms_forward
             hidden_states = self.input_layernorm(hidden_states)
         else:
+            # 用 hidden_states 和 residual 计算 norm，使用的是 add_rms_forward
             hidden_states, residual = self.input_layernorm(hidden_states, residual)
+        # 2. Attention
         hidden_states = self.self_attn(positions, hidden_states)
+        # 3. Attention 后 MLP 前的 LayerNorm
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
+        # 4. MLP
         hidden_states = self.mlp(hidden_states)
         return hidden_states, residual
 
@@ -173,6 +180,7 @@ class Qwen3Model(nn.Module):
         input_ids: torch.Tensor,
         positions: torch.Tensor,
     ) -> torch.Tensor:
+        # 输入的 token 经过 embedding 层得到 hidden_states
         hidden_states = self.embed_tokens(input_ids)
         residual = None
         for layer in self.layers:
@@ -195,6 +203,7 @@ class Qwen3ForCausalLM(nn.Module):
         config: Qwen3Config
     ) -> None:
         super().__init__()
+        # 模型初始化
         self.model = Qwen3Model(config)
         self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size)
         if config.tie_word_embeddings:

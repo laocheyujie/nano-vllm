@@ -46,6 +46,8 @@ class LLMEngine:
         self.scheduler.add(seq)
 
     def step(self):
+        # seqs: 当前 batch 中要执行的序列
+        # is_prefill: 当前 batch 是否是 prefill
         seqs, is_prefill = self.scheduler.schedule()
         token_ids = self.model_runner.call("run", seqs, is_prefill)
         self.scheduler.postprocess(seqs, token_ids)

@@ -23,11 +23,15 @@ class Scheduler:
 
     def schedule(self) -> tuple[list[Sequence], bool]:
         # prefill
+        # scheduled_seqs: 当前 batch 中要执行的序列
         scheduled_seqs = []
+        # num_seqs: 当前 batch 中序列的数量
         num_seqs = 0
+        # num_batched_tokens: 当前 batch 中累计 token 的数量
         num_batched_tokens = 0
         while self.waiting and num_seqs < self.max_num_seqs:
             seq = self.waiting[0]
+            # 要保证当前 batch 中累计 token 的数量不超过 max_num_batched_tokens
             if num_batched_tokens + len(seq) > self.max_num_batched_tokens or not self.block_manager.can_allocate(seq):
                 break
             num_seqs += 1

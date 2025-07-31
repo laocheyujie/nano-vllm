@@ -46,6 +46,7 @@ class RMSNorm(nn.Module):
         residual: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if residual is None:
+            # DecoderLayer 第一次 forward 时，residual 为 None
             return self.rms_forward(x)
         else:
             return self.add_rms_forward(x, residual)

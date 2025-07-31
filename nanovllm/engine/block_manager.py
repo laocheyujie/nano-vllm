@@ -9,6 +9,7 @@ class Block:
 
     def __init__(self, block_id):
         self.block_id = block_id
+        # block 的引用计数
         self.ref_count = 0
         self.hash = -1
         self.token_ids = []
@@ -35,6 +36,7 @@ class BlockManager:
 
     @classmethod
     def compute_hash(cls, token_ids: list[int], prefix: int = -1):
+        # 只有当 block 放满时才计算 hash
         h = xxhash.xxh64()
         if prefix != -1:
             h.update(prefix.to_bytes(8, "little"))
@@ -55,30 +57,40 @@ class BlockManager:
         self.free_block_ids.append(block_id)
 
     def can_allocate(self, seq: Sequence) -> bool:
+        # prefill 阶段执行
         return len(self.free_block_ids) >= seq.num_blocks
 
     def allocate(self, seq: Sequence):
+        # prefill 阶段执行
+        # Allocate blocks for the sequence, update the block table and hash table
         assert not seq.block_table
         h = -1
         cache_miss = False
         for i in range(seq.num_blocks):
             token_ids = seq.block(i)
+            # Compute hash for the block, only if the block is full
             h = self.compute_hash(token_ids, h) if len(token_ids) == self.block_size else -1
+            # 从全局 hash 表中查找 block_id
             block_id = self.hash_to_block_id.get(h, -1)
             if block_id == -1 or self.blocks[block_id].token_ids != token_ids:
                 cache_miss = True
             if cache_miss:
+                # 如果 cache miss，则分配一个新的 block
                 block_id = self.free_block_ids[0]
                 block = self._allocate_block(block_id)
             else:
+                # 总缓存数
                 seq.num_cached_tokens += self.block_size
                 if block_id in self.used_block_ids:
+                    # 指向同一个 block
                     block = self.blocks[block_id]
                     block.ref_count += 1
                 else:
+                    # maybe hash table has the block_id, but used_block_ids is cleared
                     block = self._allocate_block(block_id)
             if h != -1:
                 block.update(h, token_ids)
+                # 更新全局 hash 表
                 self.hash_to_block_id[h] = block_id
             seq.block_table.append(block_id)
 
@@ -92,20 +104,33 @@ class BlockManager:
         seq.block_table.clear()
 
     def can_append(self, seq: Sequence) -> bool:
+        # decode 阶段执行
+        # can_append 是在 decode 之前进行判断
+        # 只有当最后一个 block 只有 1 个 token 时，才需要判断是否可以开一个新的 block
+        # len(self.free_block_ids): 剩余 block 块数
+        # len(seq) % self.block_size == 1: 最后一个 block 只有 1 个 token
         return len(self.free_block_ids) >= (len(seq) % self.block_size == 1)
 
     def may_append(self, seq: Sequence):
+        # decode 阶段执行
+        # block 里只有 1 个 token: 开辟新的 block
+        # block 里正好满了: 更新 hash
+        # 除此之外: 啥都不做
         block_table = seq.block_table
         last_block = self.blocks[block_table[-1]]
         if len(seq) % self.block_size == 1:
+            # 只有在最后一个 block 只有 1 个 token 时，才去分配新的 block
             assert last_block.hash != -1
             block_id = self.free_block_ids[0]
             self._allocate_block(block_id)
             block_table.append(block_id)
         elif len(seq) % self.block_size == 0:
+            # 如果正好满了
             assert last_block.hash == -1
             token_ids = seq.block(seq.num_blocks-1)
+            # 取出上一个块
             prefix = self.blocks[block_table[-2]].hash if len(block_table) > 1 else -1
+            # 基于上一个块计算 hash
             h = self.compute_hash(token_ids, prefix)
             last_block.update(h, token_ids)
             self.hash_to_block_id[h] = last_block.block_id

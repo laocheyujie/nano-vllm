@@ -22,9 +22,11 @@ class VocabParallelEmbedding(nn.Module):
         self.vocab_start_idx = self.num_embeddings_per_partition * self.tp_rank
         self.vocab_end_idx = self.vocab_start_idx + self.num_embeddings_per_partition
         self.weight = nn.Parameter(torch.empty(self.num_embeddings_per_partition, embedding_dim))
+        # VocabParallelEmbedding 的自定义 weight_loader 函数，用于分布式加载权重
         self.weight.weight_loader = self.weight_loader
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor):
+        # 多卡并行时，需要将权重切分到各个卡上
         param_data = param.data
         shard_size = param_data.size(0)
         start_idx = self.tp_rank * shard_size

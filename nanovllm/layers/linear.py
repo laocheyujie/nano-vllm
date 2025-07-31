@@ -65,6 +65,7 @@ class ColumnParallelLinear(LinearBase):
         self.output_size_per_partition = divide(output_size, self.tp_size)
 
         self.weight = nn.Parameter(torch.empty(self.output_size_per_partition, self.input_size))
+        # ColumnParallelLinear 的自定义 weight_loader 函数，用于分布式加载权重
         self.weight.weight_loader = self.weight_loader
         if bias:
             self.bias = nn.Parameter(torch.empty(self.output_size_per_partition))

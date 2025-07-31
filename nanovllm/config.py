@@ -11,6 +11,7 @@ class Config:
     max_model_len: int = 4096
     gpu_memory_utilization: float = 0.9
     tensor_parallel_size: int = 1
+    # Whether to disable CUDA graphs and use eager mode
     enforce_eager: bool = False
     hf_config: AutoConfig | None = None
     eos: int = -1

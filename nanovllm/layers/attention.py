@@ -18,24 +18,30 @@ def store_kvcache_kernel(
     slot_mapping_ptr,
     D: tl.constexpr,
 ):
+    # get the thread id
     idx = tl.program_id(0)
+    # 取出当前 token 的 key, value 的偏移量，tl.arange(0, D) 预分配大小方便向量化拷贝
     key_offsets = idx * key_stride + tl.arange(0, D)
     value_offsets = idx * value_stride + tl.arange(0, D)
+    # load the memory
     key = tl.load(key_ptr + key_offsets)
     value = tl.load(value_ptr + value_offsets)
     slot = tl.load(slot_mapping_ptr + idx)
     cache_offsets = slot * D + tl.arange(0, D)
+    # 存放 k, v
     tl.store(k_cache_ptr + cache_offsets, key)
     tl.store(v_cache_ptr + cache_offsets, value)
 
 
 def store_kvcache(key: torch.Tensor, value: torch.Tensor, k_cache: torch.Tensor, v_cache: torch.Tensor, slot_mapping: torch.Tensor):
+    # N: batch_size * num_seqs 整批的 tokens 数量
     N, num_heads, head_dim = key.shape
     D = num_heads * head_dim
     assert key.stride(-1) == 1 and value.stride(-1) == 1
     assert key.stride(1) == head_dim and value.stride(1) == head_dim
     assert k_cache.stride(1) == D and v_cache.stride(1) == D
     assert slot_mapping.numel() == N
+    # N 个 tokens 开启 N 个线程，每个线程存储一个 token 的 kv-cache
     store_kvcache_kernel[(N,)](key, key.stride(0), value, value.stride(0), k_cache, v_cache, slot_mapping, D)
 
 
@@ -63,6 +69,7 @@ class Attention(nn.Module):
         context = get_context()
         k_cache, v_cache = self.k_cache, self.v_cache
         if k_cache.numel() and v_cache.numel():
+            # 存储 KV-Cache
             store_kvcache(k, v, k_cache, v_cache, context.slot_mapping)
         if context.is_prefill:
             if context.block_tables is not None:    # prefix cache

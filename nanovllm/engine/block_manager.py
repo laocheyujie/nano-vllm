@@ -28,10 +28,15 @@ class BlockManager:
 
     def __init__(self, num_blocks: int, block_size: int):
         assert num_blocks > 0
+        # block_size: 每个 block 存储的 tokens 数量
         self.block_size = block_size
+        # blocks: 全局 blocks 表
         self.blocks: list[Block] = [Block(i) for i in range(num_blocks)]
+        # hash_to_block_id: 全局 hash 表，缓存当前 token_ids 对应的全局 block_id
         self.hash_to_block_id: dict[int, int] = dict()
+        # free_block_ids: 当前空闲的 blocks 队列
         self.free_block_ids: deque[int] = deque(range(num_blocks))
+        # used_block_ids: 被占用了的 blocks 集合
         self.used_block_ids: set[int] = set()
 
     @classmethod
@@ -66,7 +71,10 @@ class BlockManager:
         assert not seq.block_table
         h = -1
         cache_miss = False
+        # 遍历 seq 的每个 block
+        # NOTE: 这里相当于对序列进行分片 (block_size) 缓存
         for i in range(seq.num_blocks):
+            # 获取当前 block 的 token_ids 片段
             token_ids = seq.block(i)
             # Compute hash for the block, only if the block is full
             h = self.compute_hash(token_ids, h) if len(token_ids) == self.block_size else -1
@@ -75,7 +83,7 @@ class BlockManager:
             if block_id == -1 or self.blocks[block_id].token_ids != token_ids:
                 cache_miss = True
             if cache_miss:
-                # 如果 cache miss，则分配一个新的 block
+                # 如果没有 cache，则分配一个新的 block
                 block_id = self.free_block_ids[0]
                 block = self._allocate_block(block_id)
             else:
@@ -127,8 +135,8 @@ class BlockManager:
         elif len(seq) % self.block_size == 0:
             # 如果正好满了
             assert last_block.hash == -1
-            token_ids = seq.block(seq.num_blocks-1)
             # 取出上一个块
+            token_ids = seq.block(seq.num_blocks-1)
             prefix = self.blocks[block_table[-2]].hash if len(block_table) > 1 else -1
             # 基于上一个块计算 hash
             h = self.compute_hash(token_ids, prefix)

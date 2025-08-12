@@ -22,9 +22,11 @@ class Sequence:
         self.last_token = token_ids[-1]
         # self.num_tokens 动态在变
         self.num_tokens = len(self.token_ids)
-        # self.num_prompt_tokens 不会变
+        # self.num_prompt_tokens 不会变，用来记录原始输入的 token 数量
         self.num_prompt_tokens = len(token_ids)
+        # self.num_cached_tokens 动态在变，用来记录当前缓存了的 tokens 数量
         self.num_cached_tokens = 0
+        # seq.block_table: 当前序列使用的全局 blocks 的索引，方便从全局 blocks 里取数
         self.block_table = []
         self.temperature = sampling_params.temperature
         self.max_tokens = sampling_params.max_tokens
@@ -58,6 +60,7 @@ class Sequence:
 
     @property
     def num_blocks(self):
+        # 当前 seq 占用几个 block
         return (self.num_tokens + self.block_size - 1) // self.block_size
 
     @property
@@ -65,6 +68,7 @@ class Sequence:
         return self.num_tokens - (self.num_blocks - 1) * self.block_size
 
     def block(self, i):
+        # 获取当前 seq 的第 i 个 block 的 token_ids 片段
         assert 0 <= i < self.num_blocks
         return self.token_ids[i*self.block_size: (i+1)*self.block_size]
 

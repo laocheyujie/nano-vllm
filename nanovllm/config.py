@@ -6,8 +6,11 @@ from transformers import AutoConfig
 @dataclass
 class Config:
     model: str
+    # 一个 batch 里所有的 tokens 数量
     max_num_batched_tokens: int = 16384
+    # 一个 batch 里最多的序列数量
     max_num_seqs: int = 512
+    # 模型最大长度
     max_model_len: int = 4096
     gpu_memory_utilization: float = 0.9
     tensor_parallel_size: int = 1

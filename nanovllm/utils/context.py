@@ -5,9 +5,13 @@ import torch
 @dataclass
 class Context:
     is_prefill: bool = False
+    # 累积的 q 的长度列表，即记录每个seqlen的长度，从而方便截取 [0, seqlen_1, seqlen_1+seqlen_2, ...]
     cu_seqlens_q: torch.Tensor | None = None
+    # 累积的 k 的长度列表，即记录每个seqlen的长度，从而方便截取 [0, seqlen_1, seqlen_1+seqlen_2, ...]
     cu_seqlens_k: torch.Tensor | None = None
+    # 当前 batch 中最大的 q 的长度
     max_seqlen_q: int = 0
+    # 当前 batch 中最大的 k 的长度
     max_seqlen_k: int = 0
     slot_mapping: torch.Tensor | None = None
     context_lens: torch.Tensor | None = None

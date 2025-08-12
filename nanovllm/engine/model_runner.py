@@ -197,7 +197,10 @@ class ModelRunner:
 
     @torch.inference_mode()
     def run_model(self, input_ids: torch.Tensor, positions: torch.Tensor, is_prefill: bool):
+        # len(input_ids): bs * seq_len
         if is_prefill or self.enforce_eager or input_ids.size(0) > 512:
+            # self.model(input_ids, positions).shape: (bs * seq_len, hidden_size)
+            # self.model.compute_logits(self.model(input_ids, positions)).shape: (bs, vocab_size)
             return self.model.compute_logits(self.model(input_ids, positions))
         else:
             bs = input_ids.size(0)
@@ -218,8 +221,13 @@ class ModelRunner:
     def run(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
         input_ids, positions = self.prepare_prefill(seqs) if is_prefill else self.prepare_decode(seqs)
         temperatures = self.prepare_sample(seqs) if self.rank == 0 else None
+        # 根据当前的 input_ids 和 positions 计算 logits，得到 batch 里每个 sequence 的下一个 token 的 logits
+        # logits.shape: (bs, vocab_size)
         logits = self.run_model(input_ids, positions, is_prefill)
+        # 根据 logits 和 temperatures 采样得到 token_ids
+        # len(token_ids): bs
         token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
+        # 重置 context
         reset_context()
         return token_ids
 

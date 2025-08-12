@@ -40,7 +40,10 @@ class LLMEngine:
             p.join()
 
     def add_request(self, prompt: str | list[int], sampling_params: SamplingParams):
+        # 把 prompt 转换成 token_ids 并加到 scheduler 中的 waitting 列表
+        # '<|im_start|>user\nintroduce yourself<|im_end|>\n<|im_start|>assistant\n'
         if isinstance(prompt, str):
+            # [151644, 872, 198, 396, 47845, 6133, 151645, 198, 151644, 77091, 198]
             prompt = self.tokenizer.encode(prompt)
         seq = Sequence(prompt, sampling_params)
         self.scheduler.add(seq)
@@ -49,6 +52,8 @@ class LLMEngine:
         # seqs: 当前 batch 中要执行的序列
         # is_prefill: 当前 batch 是否是 prefill
         seqs, is_prefill = self.scheduler.schedule()
+        # token_ids: 当前 batch 中每个 sequence 的下一个 token 的 token_ids
+        # len(token_ids): bs
         token_ids = self.model_runner.call("run", seqs, is_prefill)
         self.scheduler.postprocess(seqs, token_ids)
         outputs = [(seq.seq_id, seq.completion_token_ids) for seq in seqs if seq.is_finished]
@@ -69,11 +74,13 @@ class LLMEngine:
         if not isinstance(sampling_params, list):
             sampling_params = [sampling_params] * len(prompts)
         for prompt, sp in zip(prompts, sampling_params):
+            # 1. 把 prompt 转换成 token_ids 并加到 scheduler 中的 waitting 列表
             self.add_request(prompt, sp)
         outputs = {}
         prefill_throughput = decode_throughput = 0.
         while not self.is_finished():
             t = perf_counter()
+            # 2. 执行当前 batch 的 prefill 和 decode
             output, num_tokens = self.step()
             if use_tqdm:
                 if num_tokens > 0:

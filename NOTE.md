@@ -1,31 +1,9 @@
-## Sequence
-
-主要属性：
-- status: 当前序列的状态 WAITING | RUNNING | FINISHED
-- block_table: 当前序列使用的全局 blocks 的索引，方便从全局 blocks 里取数
-- num_cached_tokens: 当前缓存了的 tokens 数量
-
-## Block
-
-主要属性：
-- ref_count: 当前 block 被引用的数量
-- hash: hash 值
-
-## BlockManager
-
-主要属性：
-- block_size: 每个 block 存储的 tokens 数量
-- blocks: 全局 blocks 表
-- hash_to_block_id：通过 hash 值快速检索 block
-- free_block_ids: 当前空闲的 blocks 队列
-- used_block_ids: 被占用了的 blocks 集合
-
 
 ## 整体流程
 1. 实例化 LLM，也即实例化 `LLMEngine`
     1. 调用 `ModelRunner`
         1. 建立 NCCL 通信组
-        2. 使用 `load_model` 加载模型
+        2. 使用 `load_model` 加载模型（详见“加载模型”）
         3. `warmup_model`
             1. `torch.cuda.empty_cache()` 清理显存
             2. 用最大 sequens 跑一个 batch `ModelRunner.run`
@@ -136,6 +114,44 @@
         4. 最后应该再加一个去掉 stop words 的操作
 
 
+## 加载模型
+1. 首先获取模型的模块名称映射
+2. 遍历读取 *.safetensors
+3. 遍历每个 key (也即权重名称)，如果有映射，就把名称替换成映射后的名称
+4. 根据权重名称获取模型定义里该模块的权重加载方式
+    1. 默认方式就是直接把保存的权重拷贝到模块里对应的权重上
+    2. 自定义了 `weight_loader` 方法的模块，使用自定义的加载方式（比如张量并行的加载方式）
+
+
+## 张量并行
+weight_loader: 如何将从模型文件（checkpoint）中读出的、属于单个逻辑层（比如 Query 层）的完整权重，正确地加载到当前 GPU 所持有的、合并后的大权重矩阵的对应“切片”上
+1. param.data 的形状是合并后（比如QKV的合并矩阵或up、down的合并矩阵）的 tp 切片后的大小
+2. 计算出 param.data 当前层的偏移量，以便正确读取出 Q, K, V 或 up, down
+3. 从保存的完整的当前层参数里，取出 tp 切分后对应的部分参数
+4. 正确地把参数赋值
+
+
+## Sequence
+
+主要属性：
+- status: 当前序列的状态 WAITING | RUNNING | FINISHED
+- block_table: 当前序列使用的全局 blocks 的索引，方便从全局 blocks 里取数
+- num_cached_tokens: 当前缓存了的 tokens 数量
+
+## Block
+
+主要属性：
+- ref_count: 当前 block 被引用的数量
+- hash: hash 值
+
+## BlockManager
+
+主要属性：
+- block_size: 每个 block 存储的 tokens 数量
+- blocks: 全局 blocks 表
+- hash_to_block_id：通过 hash 值快速检索 block
+- free_block_ids: 当前空闲的 blocks 队列
+- used_block_ids: 被占用了的 blocks 集合
 
 
 ## LLaMA 结构

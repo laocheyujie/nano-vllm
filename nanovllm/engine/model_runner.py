@@ -43,6 +43,7 @@ class ModelRunner:
                 self.shm = SharedMemory(name="nanovllm", create=True, size=2**20)
                 dist.barrier()
             else:
+                # dist.barrier() 用于避免子进程在主进程创建 shm 之前就获取
                 dist.barrier()
                 self.shm = SharedMemory(name="nanovllm")
                 self.loop()
@@ -55,6 +56,7 @@ class ModelRunner:
                 self.shm.unlink()
         if not self.enforce_eager:
             del self.graphs, self.graph_pool
+        # 在销毁分布式进程组之前，确保此进程负责的 GPU 已经完成了所有待处理的计算任务
         torch.cuda.synchronize()
         dist.destroy_process_group()
 
@@ -83,6 +85,7 @@ class ModelRunner:
             event.set()
 
     def call(self, method_name, *args):
+        # 统一入口，用于下发任务到子进程
         if self.world_size > 1 and self.rank == 0:
             self.write_shm(method_name, *args)
         method = getattr(self, method_name, None)

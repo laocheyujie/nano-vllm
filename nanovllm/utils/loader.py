@@ -19,6 +19,7 @@ def load_model(model: nn.Module, path: str):
                     if k in weight_name:
                         v, shard_id = packed_modules_mapping[k]
                         param_name = weight_name.replace(k, v)
+                        # param 是 torch.nn.Parameter 实例，可以用 param.data 访问参数矩阵
                         param = model.get_parameter(param_name)
                         weight_loader = getattr(param, "weight_loader")
                         # weight_loader 在 QKVParallelLinear 中被重写，增加了 shard_id 参数

@@ -97,10 +97,17 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor, loaded_shard_id: int):
         param_data = param.data
+        # 计算目标位置的偏移量
+        # sum(self.output_sizes[:loaded_shard_id]) 计算出在当前要加载的逻辑层之前，所有逻辑层的输出维度之和
+        # // self.tp_size 将全局的偏移量转换为当前 GPU 上的局部偏移量
         shard_offset = sum(self.output_sizes[:loaded_shard_id]) // self.tp_size
+        # 计算目标位置的大小
         shard_size = self.output_sizes[loaded_shard_id] // self.tp_size
+        # 从当前 GPU 的大权重矩阵 (param_data) 中精确地“裁剪”出将要被写入的目标区域
         param_data = param_data.narrow(self.tp_dim, shard_offset, shard_size)
+        # 将完整的权重矩阵切分成 tp_size 块并选出属于自己的这一份
         loaded_weight = loaded_weight.chunk(self.tp_size, self.tp_dim)[self.tp_rank]
+        # 原地拷贝
         param_data.copy_(loaded_weight)
 
 
@@ -125,17 +132,27 @@ class QKVParallelLinear(ColumnParallelLinear):
         super().__init__(input_size, output_size, bias)
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor, loaded_shard_id: str):
+        # param: 合并后的大权重矩阵 QKV 矩阵 tp 切分后的部分
+        # loaded_weight: 从模型文件中加载出来的单个逻辑层的完整权重矩阵，比如 Q 矩阵
+        # loaded_shard_id: 一个索引，用于标识 loaded_weight 对应的逻辑层
+        # 比如，如果这个大层合并了 Q, K, V，那么 loaded_shard_id 为 0 可能代表 Q，1 代表 K，2 代表 V
+        
+        # 获取当前 GPU 上参数张量的实际数据
         param_data = param.data
         assert loaded_shard_id in ["q", "k", "v"]
         if loaded_shard_id == "q":
             shard_size = self.num_heads * self.head_size
+            # Q 位于与最前面，偏移量为 0
             shard_offset = 0
         elif loaded_shard_id == "k":
             shard_size = self.num_kv_heads * self.head_size
+            # 偏移量是 Q 的维度
             shard_offset = self.num_heads * self.head_size
         else:
             shard_size = self.num_kv_heads * self.head_size
+            # 偏移量是 Q 和 K 的维度
             shard_offset = self.num_heads * self.head_size + self.num_kv_heads * self.head_size
+        # 把合并后的分片后的大矩阵拿出属于当前逻辑层的部分，比如取出 Q、K、V
         param_data = param_data.narrow(self.tp_dim, shard_offset, shard_size)
         loaded_weight = loaded_weight.chunk(self.tp_size, self.tp_dim)[self.tp_rank]
         param_data.copy_(loaded_weight)
